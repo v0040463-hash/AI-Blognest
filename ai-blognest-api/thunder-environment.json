@@ -1,0 +1,20 @@
+{
+  "client": "Thunder Client",
+  "environmentName": "AI BlogNest Local",
+  "dateExported": "2026-09-30",
+  "version": "1.0",
+  "variables": [
+    {
+      "name": "base_url",
+      "value": "http://localhost:5000"
+    },
+    {
+      "name": "token",
+      "value": ""
+    },
+    {
+      "name": "blogId",
+      "value": "blog_default_001"
+    }
+  ]
+}

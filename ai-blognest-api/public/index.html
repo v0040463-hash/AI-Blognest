@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI BlogNest API - Real-Time Dashboard & Playground</title>
+  <script src="/socket.io/socket.io.js"></script>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card: #1e293b;
+      --card-border: #334155;
+      --primary: #6366f1;
+      --primary-hover: #4f46e5;
+      --accent: #10b981;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --danger: #ef4444;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif; }
+    body { background-color: var(--bg); color: var(--text); padding: 24px; min-height: 100vh; }
+    .container { max-width: 1200px; margin: 0 auto; }
+    header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid var(--card-border); flex-wrap: wrap; gap: 12px; }
+    .title-group h1 { font-size: 24px; font-weight: 700; color: #fff; display: flex; align-items: center; gap: 10px; }
+    .title-group p { font-size: 14px; color: var(--text-muted); margin-top: 4px; }
+    .badge { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 9999px; font-size: 13px; font-weight: 600; }
+    .badge-green { background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); }
+    .badge-blue { background: rgba(99, 102, 241, 0.15); color: #a5b4fc; border: 1px solid rgba(99, 102, 241, 0.3); }
+    .pulse-dot { width: 8px; height: 8px; border-radius: 50%; background: #34d399; box-shadow: 0 0 8px #34d399; animation: pulse 2s infinite; }
+    @keyframes pulse { 0% { opacity: 0.4; } 50% { opacity: 1; } 100% { opacity: 0.4; } }
+    
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 20px; }
+    .card { background: var(--card); border: 1px solid var(--card-border); border-radius: 12px; padding: 20px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.2); }
+    .card h2 { font-size: 17px; margin-bottom: 14px; color: #fff; display: flex; align-items: center; gap: 8px; }
+    
+    .form-group { margin-bottom: 12px; }
+    label { display: block; font-size: 12px; font-weight: 500; color: var(--text-muted); margin-bottom: 4px; }
+    input, textarea, select { width: 100%; padding: 10px 12px; background: #0f172a; border: 1px solid var(--card-border); border-radius: 8px; color: #fff; font-size: 13px; outline: none; transition: border-color 0.2s; }
+    input:focus, textarea:focus, select:focus { border-color: var(--primary); }
+    textarea { resize: vertical; min-height: 80px; }
+    
+    button { background: var(--primary); color: #fff; border: none; border-radius: 8px; padding: 10px 16px; font-size: 13px; font-weight: 600; cursor: pointer; transition: background-color 0.2s, transform 0.1s; display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+    button:hover { background: var(--primary-hover); }
+    button:active { transform: scale(0.98); }
+    .btn-secondary { background: #334155; }
+    .btn-secondary:hover { background: #475569; }
+    .btn-success { background: var(--accent); }
+    .btn-success:hover { background: #059669; }
+    
+    .feed { max-height: 320px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
+    .feed-item { background: #0f172a; border: 1px solid var(--card-border); border-radius: 8px; padding: 12px; font-size: 13px; }
+    .feed-item .header { display: flex; justify-content: space-between; font-size: 11px; color: var(--text-muted); margin-bottom: 4px; }
+    .feed-item .title { font-weight: 600; color: #e2e8f0; }
+    .feed-item .desc { color: #94a3b8; font-size: 12px; margin-top: 4px; }
+    
+    .terminal { background: #0b0f19; border: 1px solid #1e293b; border-radius: 8px; padding: 12px; font-family: monospace; font-size: 12px; color: #a5b4fc; max-height: 250px; overflow-y: auto; white-space: pre-wrap; }
+    .banner { padding: 12px 16px; background: rgba(99, 102, 241, 0.1); border-left: 4px solid var(--primary); border-radius: 4px; margin-bottom: 20px; font-size: 13px; line-height: 1.5; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="title-group">
+        <h1><span>⚡</span> AI BlogNest API</h1>
+        <p>Real-Time REST API &amp; WebSocket Architecture with Node.js &amp; Gemini</p>
+      </div>
+      <div style="display:flex; gap:10px;">
+        <div class="badge badge-green" id="socketStatus">
+          <div class="pulse-dot"></div> Socket.io Connected
+        </div>
+        <div class="badge badge-blue" id="liveReadersBadge">
+          <span>👥</span> <span id="readersCount">1</span> Live Viewers
+        </div>
+      </div>
+    </header>
+
+    <div class="banner">
+      <strong>🚀 Real-Time Project Running:</strong> This interactive dashboard lets you test live WebSockets, AI generation, and CRUD operations. You can also test via Thunder Client, Postman, or curl using the bundled collection.
+    </div>
+
+    <div class="grid">
+      <!-- AI Generator Card -->
+      <div class="card">
+        <h2><span>🤖</span> Generate Blog with AI</h2>
+        <div class="form-group">
+          <label>Topic / Prompt</label>
+          <input type="text" id="aiTopic" value="Next Generation Real-Time APIs with WebSockets" placeholder="e.g. AI in Healthcare 2026">
+        </div>
+        <div class="form-group">
+          <label>Category</label>
+          <select id="aiCategory">
+            <option value="Technology">Technology</option>
+            <option value="Artificial Intelligence">Artificial Intelligence</option>
+            <option value="Engineering">Engineering</option>
+            <option value="Web Development">Web Development</option>
+          </select>
+        </div>
+        <div style="display:flex; gap:10px;">
+          <button id="btnAiGenerate" style="flex:1;">Generate Article</button>
+          <button id="btnAiSummarize" class="btn-secondary">Summarize</button>
+        </div>
+        <div style="margin-top:14px;">
+          <label>AI Output Preview</label>
+          <div class="terminal" id="aiOutput">Click "Generate Article" to query the Gemini AI engine...</div>
+        </div>
+      </div>
+
+      <!-- Live Real-Time Events Card -->
+      <div class="card">
+        <h2><span>📡</span> Real-Time Socket.io Live Feed</h2>
+        <p style="font-size:12px; color:var(--text-muted); margin-bottom:10px;">
+          Broadcasts live when blogs are published, liked, or commented upon.
+        </p>
+        <div class="feed" id="liveFeed">
+          <div class="feed-item">
+            <div class="header"><span>System Event</span><span>Just now</span></div>
+            <div class="title">Socket.io listener initialized</div>
+            <div class="desc">Listening for 'new-blog-published', 'live-viewers-updated', and 'new-comment-received'</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Quick Blog Publisher Card -->
+      <div class="card">
+        <h2><span>✍️</span> Publish Live Blog Post</h2>
+        <div class="form-group">
+          <label>Blog Title</label>
+          <input type="text" id="blogTitle" placeholder="My New Awesome Post">
+        </div>
+        <div class="form-group">
+          <label>Content</label>
+          <textarea id="blogContent" placeholder="Write markdown or standard text here..."></textarea>
+        </div>
+        <div style="display:flex; gap:10px;">
+          <button id="btnPublishBlog" class="btn-success" style="flex:1;">Publish Live Post</button>
+          <button id="btnUseAiOutput" class="btn-secondary">Use AI Text</button>
+        </div>
+      </div>
+
+      <!-- API Quick Test Console -->
+      <div class="card">
+        <h2><span>⚡</span> API Endpoints Quick Test</h2>
+        <div style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
+          <button class="btn-secondary" onclick="runApiCall('/api/health')">Health Check</button>
+          <button class="btn-secondary" onclick="runApiCall('/api/blogs')">Get All Blogs</button>
+          <button class="btn-secondary" onclick="quickLogin()">Quick Login</button>
+          <button class="btn-secondary" onclick="getProfile()">My Profile</button>
+        </div>
+        <label>Response JSON</label>
+        <div class="terminal" id="apiResponse">// Click any test button above to execute live REST request</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const socket = io();
+    let latestAiResult = null;
+    let authToken = localStorage.getItem('token') || '';
+
+    // Socket.io Connection & Events
+    socket.on('connect', () => {
+      document.getElementById('socketStatus').innerHTML = '<div class="pulse-dot"></div> Socket.io Connected';
+      // Join default blog room
+      socket.emit('join-blog', { blogId: 'blog_default_001', user: { name: 'Live Tester' } });
+    });
+
+    socket.on('disconnect', () => {
+      document.getElementById('socketStatus').innerHTML = '<span style="color:#ef4444;">● Disconnected</span>';
+    });
+
+    socket.on('live-viewers-updated', (data) => {
+      document.getElementById('readersCount').innerText = data.liveViewers || 1;
+    });
+
+    socket.on('new-blog-published', (data) => {
+      addFeedItem('📢 Live Blog Published', data.message, `Category: ${data.blog.category}`);
+    });
+
+    socket.on('new-comment-received', (data) => {
+      addFeedItem('💬 New Live Comment', `"${data.comment.content}"`, `By: ${data.comment.userName || 'Anonymous'}`);
+    });
+
+    socket.on('blog-like-updated', (data) => {
+      addFeedItem('❤️ Blog Liked', `Blog has ${data.likesCount} likes now`, `Liked by: ${data.likedBy}`);
+    });
+
+    function addFeedItem(title, desc, extra = '') {
+      const feed = document.getElementById('liveFeed');
+      const item = document.createElement('div');
+      item.className = 'feed-item';
+      item.innerHTML = `
+        <div class="header"><span>${title}</span><span>${new Date().toLocaleTimeString()}</span></div>
+        <div class="title">${desc}</div>
+        <div class="desc">${extra}</div>
+      `;
+      feed.prepend(item);
+    }
+
+    // AI Generation
+    document.getElementById('btnAiGenerate').addEventListener('click', async () => {
+      const topic = document.getElementById('aiTopic').value;
+      const category = document.getElementById('aiCategory').value;
+      const output = document.getElementById('aiOutput');
+      output.innerText = 'Calling AI generation service...';
+
+      try {
+        const res = await fetch('/api/ai/generate-blog', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ topic, category })
+        });
+        const data = await res.json();
+        latestAiResult = data.data;
+        output.innerText = JSON.stringify(data, null, 2);
+      } catch (err) {
+        output.innerText = 'Error: ' + err.message;
+      }
+    });
+
+    document.getElementById('btnUseAiOutput').addEventListener('click', () => {
+      if (latestAiResult) {
+        document.getElementById('blogTitle').value = latestAiResult.title || '';
+        document.getElementById('blogContent').value = latestAiResult.content || '';
+      } else {
+        alert('Please generate an AI blog first!');
+      }
+    });
+
+    // Publish Blog
+    document.getElementById('btnPublishBlog').addEventListener('click', async () => {
+      const title = document.getElementById('blogTitle').value;
+      const content = document.getElementById('blogContent').value;
+      if (!title || !content) return alert('Title and Content required!');
+
+      try {
+        const headers = { 'Content-Type': 'application/json' };
+        if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+
+        const res = await fetch('/api/blogs', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            title,
+            content,
+            category: document.getElementById('aiCategory').value,
+            aiGenerated: !!latestAiResult
+          })
+        });
+        const data = await res.json();
+        document.getElementById('apiResponse').innerText = JSON.stringify(data, null, 2);
+        if (data.success) {
+          alert('Blog published successfully! Check the real-time feed.');
+        } else {
+          alert('Notice: ' + data.message + ' (Tip: Click "Quick Login" if auth is needed)');
+        }
+      } catch (err) {
+        alert('Error: ' + err.message);
+      }
+    });
+
+    // Quick API callers
+    async function runApiCall(url) {
+      const out = document.getElementById('apiResponse');
+      out.innerText = 'Requesting ' + url + '...';
+      try {
+        const res = await fetch(url);
+        const json = await res.json();
+        out.innerText = JSON.stringify(json, null, 2);
+      } catch (e) {
+        out.innerText = 'Error: ' + e.message;
+      }
+    }
+
+    async function quickLogin() {
+      const out = document.getElementById('apiResponse');
+      out.innerText = 'Logging in with seeded author account...';
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: 'john@example.com', password: '123456' })
+        });
+        const data = await res.json();
+        if (data.data?.token) {
+          authToken = data.data.token;
+          localStorage.setItem('token', authToken);
+        }
+        out.innerText = JSON.stringify(data, null, 2);
+      } catch (e) {
+        out.innerText = 'Error: ' + e.message;
+      }
+    }
+
+    async function getProfile() {
+      const out = document.getElementById('apiResponse');
+      if (!authToken) {
+        return out.innerText = 'Token not found. Please click "Quick Login" first.';
+      }
+      try {
+        const res = await fetch('/api/auth/profile', {
+          headers: { 'Authorization': `Bearer ${authToken}` }
+        });
+        const data = await res.json();
+        out.innerText = JSON.stringify(data, null, 2);
+      } catch (e) {
+        out.innerText = 'Error: ' + e.message;
+      }
+    }
+  </script>
+</body>
+</html>
